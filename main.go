@@ -34,9 +34,9 @@ type (
     }
 )
 
-/**************
-**  main fn  **
-**************/
+/*************
+ *  main fn  *
+ *************/
 func main() {
     //install yt-dlp and cache it if not already installed
     ytdlp.MustInstall(context.TODO(), nil)
@@ -66,9 +66,9 @@ func main() {
 }
 
 
-/******************************
-** fn to read settings.json  **
-******************************/
+/*****************************
+ * fn to read settings.json  *
+ *****************************/
 func readSettings() Settings {
     var settings Settings
     _, err := toml.DecodeFile("settings.toml", &settings)
@@ -81,9 +81,9 @@ func readSettings() Settings {
 }
 
 
-/****************************
-** fn to serve the web ui  **
-****************************/
+/***************************
+ * fn to serve the web ui  *
+ ***************************/
 func webHandler(w http.ResponseWriter, r *http.Request) {
     requestedPage := fmt.Sprintf("web/%s", r.URL.Path[1:])
 
@@ -166,9 +166,9 @@ func saveHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 
-/******************************************************
-**  fn to recieve download requests for saved video  **
-******************************************************/
+/*****************************************************
+ *  fn to recieve download requests for saved video  *
+ *****************************************************/
 func dlHandler(w http.ResponseWriter, r *http.Request) {
     //get the `file` tag in the header
     requestedDL := r.Header.Get("file")
