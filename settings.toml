@@ -1,0 +1,4 @@
+name = "yt-dlp WebGO"
+
+[server] 
+port = 9841
