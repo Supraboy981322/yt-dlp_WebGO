@@ -14,14 +14,12 @@ import (
     "context"
     "strconv"
 
-//    "golang.org/x/net/websocket"
-
-    "github.com/gorilla/websocket"
     "github.com/BurntSushi/toml"
     "github.com/lrstanley/go-ytdlp"
 )
 
 type (
+    //struct for the server's settings toml
     ServerSettings struct {
         Server string `toml:"server"`
         Port int `toml:"port"`
@@ -31,6 +29,13 @@ type (
     Settings struct {
         Name string `toml:"name"`
         Server ServerSettings
+    }
+
+    //struct for progress json
+    ProgressStruct struct {
+        Percent int `json:"percent"`
+        Eta string `json:"eta"`
+        Filename string `json:"filename"`
     }
 )
 
@@ -46,7 +51,7 @@ func main() {
     fmt.Printf("  name:  %s\n", readSettings().Name)
     
     http.HandleFunc("/save", saveHandler)
-//    http.Handle("/progress", websocket.Handler(dlProgress))
+    http.HandleFunc("/progress", dlProgress)
     http.HandleFunc("/", webHandler)
 
     ipAddressArray, err := net.InterfaceAddrs()
@@ -106,13 +111,59 @@ func webHandler(w http.ResponseWriter, r *http.Request) {
  *  fn to handle dl progress websocket  *
  ****************************************/
 func dlProgress(w http.ResponseWriter, r *http.Request) {
-    progressJSON, err := ioutil.ReadFile("progress.json")
-    if err != nil {
-        fmt.Errorf("failed to read progress.json")
-    }
-    jsonReader := bytes.NewReader(progressJSON)
+    var progressJSON ProgressStruct
+    //create the headers for data stream
+    w.Header().Set("Content-Type", "text/event-stream")
+    w.Header().Set("Cache-Control", "no-cache")
+    w.Header().Set("Connection", "keep-alive")
+    w.Header().Set("Access-Control-Allow-Origin", "*")
 
-    go writer(ws, lastMod)
+    //flush headers to client
+    flusher, ok := w.(http.Flusher)
+    if !ok {
+        http.Error(w, "streaming unsupported by client", http.StatusInternalServerError)
+        return
+    }
+    flusher.Flush()
+
+    ctx := r.Context()
+    ticker := time.NewTicker(500 * time.Millisecond)
+    defer ticker.Stop()
+    
+    for {
+        //read progress.json
+        progressJSONbytes, err := ioutil.ReadFile("progress.json")
+        if err != nil {
+            fmt.Errorf("failed to read progress.json")
+        }
+
+        //unmarshal progressJSONbytes
+        err = json.Unmarshal(progressJSONbytes, &progressJSON)
+        if err != nil {
+            fmt.Errorf("failed unmarshalling progress.json")
+        }
+
+        select {
+        case <-ctx.Done():
+            fmt.Println("client disconnected")
+            return
+        case <-ticker.C:
+            if progressJSON.Percent <= 100 {
+                _, _ = fmt.Fprintf(w, "data: %s\n\n", progressJSONbytes)
+                return
+            } else if progressJSON.Percent == 100 {
+                _, _ = fmt.Fprintf(w, "event: done\n")
+                return
+            } else {
+                _, _ = fmt.Fprintf(w, "event: ERROR\n")
+                return
+            }
+            flusher.Flush()
+            return
+        default:
+            _, _ = fmt.Fprintf(w, "event: ERROR\n")
+        }
+    }
 }
 
 
@@ -142,7 +193,6 @@ func saveHandler(w http.ResponseWriter, r *http.Request) {
         ProgressFunc(100*time.Millisecond, func(prog ytdlp.ProgressUpdate) {
             data := []byte(fmt.Sprintf(
                 "%s @ %s [etc: %s] :: %s\n",
-                prog.Status,
                 prog.PercentString(),
                 prog.ETA(),
                 prog.Filename,))
